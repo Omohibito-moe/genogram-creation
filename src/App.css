@@ -1,0 +1,204 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Hiragino Sans', 'Meiryo', 'Yu Gothic', sans-serif;
+  background: #f5f6fa;
+  color: #222;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── App shell ── */
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.app-header {
+  margin-bottom: 20px;
+}
+
+.app-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.warning-banner {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── Sections ── */
+.section {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid #aaa;
+  border-radius: 5px;
+  background: #f0f0f0;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+.btn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: white;
+  font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+/* ── Input panel ── */
+.input-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.input-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.input-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.6;
+}
+.input-textarea:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.input-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Canvas ── */
+.canvas-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.svg-scroll {
+  overflow: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  max-height: 520px;
+}
+
+/* ── JSON editor ── */
+.json-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.json-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.json-editor-header span:first-child {
+  font-weight: 600;
+}
+
+.json-hint {
+  font-size: 12px;
+  color: #666;
+}
+
+.json-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  resize: vertical;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+.json-textarea:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.json-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+/* ── Export row ── */
+.export-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Error ── */
+.error-msg {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fee2e2;
+  border: 1px solid #f87171;
+  border-radius: 5px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+/* ── Footer ── */
+.app-footer {
+  text-align: center;
+  color: #888;
+  padding: 16px 0 8px;
+}
