@@ -382,9 +382,13 @@ export default function GenogramCanvas({
     return () => window.removeEventListener('mouseup', commitDrag);
   }, [commitDrag]);
 
-  const handleSVGClick = useCallback(() => {
+  const handleSVGClick = useCallback((e) => {
+    // Only deselect when clicking the SVG background, not nodes or relation lines
+    // (node/relation clicks call e.stopPropagation() so they won't reach here)
     if (justDraggedRef.current) return;
-    onCanvasClick();
+    if (e.target === svgRef.current || e.target.dataset?.bg === '1') {
+      onCanvasClick();
+    }
   }, [onCanvasClick]);
 
   // ── derived data ───────────────────────────────────────────────────────────
@@ -465,7 +469,11 @@ export default function GenogramCanvas({
             const pos = displayPositions[node.id];
             if (!pos) return null;
             return (
-              <g key={node.id} onMouseDown={(e) => handleNodeMouseDown(e, node.id)}>
+              <g
+                key={node.id}
+                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <NodeShape
                   node={node}
                   x={pos.x}
