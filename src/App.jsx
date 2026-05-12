@@ -1,22 +1,153 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import InputPanel from './components/InputPanel';
-import JsonEditor from './components/JsonEditor';
 import GenogramCanvas from './components/GenogramCanvas';
+import EditPanel from './components/EditPanel';
 import './App.css';
 
 const EMPTY_DATA = { nodes: [], relations: [] };
 
+function nextNodeId(nodes) {
+  const nums = nodes.map((n) => parseInt(n.id.slice(1))).filter(Number.isFinite);
+  return `n${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
+}
+
 export default function App() {
-  const [genogramData, setGenogramData] = useState(EMPTY_DATA);
-  const [jsonText, setJsonText] = useState(JSON.stringify(EMPTY_DATA, null, 2));
+  const [data, setData] = useState(EMPTY_DATA);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [jsonError, setJsonError] = useState('');
+  const [inputOpen, setInputOpen] = useState(true);
+
+  // Selection
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedRelIndex, setSelectedRelIndex] = useState(null);
+
+  // Connect mode
+  const [mode, setMode] = useState('select'); // 'select' | 'connect'
+  const [connectSource, setConnectSource] = useState(null);
+
+  const svgRef = useRef(null);
+
+  // ── core data helpers ──────────────────────────────────────────────────────
+
+  const updateData = useCallback((newData) => setData(newData), []);
+
+  const updateNode = useCallback(
+    (id, changes) =>
+      updateData({ ...data, nodes: data.nodes.map((n) => (n.id === id ? { ...n, ...changes } : n)) }),
+    [data, updateData]
+  );
+
+  const addNode = useCallback(() => {
+    const id = nextNodeId(data.nodes);
+    const gen0Count = data.nodes.filter((n) => (n.generation ?? 0) === 0).length;
+    const newNode = {
+      id, sex: 'M', age: null, label: '新規', dead: false, self: false,
+      generation: 0, sibling_order: gen0Count,
+    };
+    updateData({ ...data, nodes: [...data.nodes, newNode] });
+    setSelectedNodeId(id);
+    setSelectedRelIndex(null);
+  }, [data, updateData]);
+
+  const deleteNode = useCallback(
+    (id) => {
+      updateData({
+        nodes: data.nodes.filter((n) => n.id !== id),
+        relations: data.relations.filter((r) => r.from !== id && r.to !== id),
+      });
+      setSelectedNodeId(null);
+    },
+    [data, updateData]
+  );
+
+  const updateRelation = useCallback(
+    (index, changes) =>
+      updateData({
+        ...data,
+        relations: data.relations.map((r, i) => (i === index ? { ...r, ...changes } : r)),
+      }),
+    [data, updateData]
+  );
+
+  const addRelation = useCallback(
+    (fromId, toId) => {
+      const newRel = { from: fromId, to: toId, type: 'close', note: '' };
+      const newIndex = data.relations.length;
+      updateData({ ...data, relations: [...data.relations, newRel] });
+      setSelectedRelIndex(newIndex);
+      setSelectedNodeId(null);
+    },
+    [data, updateData]
+  );
+
+  const deleteRelation = useCallback(
+    (index) => {
+      updateData({ ...data, relations: data.relations.filter((_, i) => i !== index) });
+      setSelectedRelIndex(null);
+    },
+    [data, updateData]
+  );
+
+  const handleNodeMove = useCallback(
+    (id, x, y) => updateNode(id, { x, y }),
+    [updateNode]
+  );
+
+  // ── connect mode ───────────────────────────────────────────────────────────
+
+  const handleConnectStep = useCallback(
+    (nodeId) => {
+      if (!connectSource) {
+        setConnectSource(nodeId);
+      } else if (connectSource === nodeId) {
+        setConnectSource(null);
+      } else {
+        addRelation(connectSource, nodeId);
+        setConnectSource(null);
+        setMode('select');
+      }
+    },
+    [connectSource, addRelation]
+  );
+
+  const startConnect = () => {
+    setMode('connect');
+    setConnectSource(null);
+    setSelectedNodeId(null);
+    setSelectedRelIndex(null);
+  };
+
+  const cancelConnect = () => {
+    setMode('select');
+    setConnectSource(null);
+  };
+
+  // ── canvas selection ───────────────────────────────────────────────────────
+
+  const handleNodeClick = useCallback((id) => {
+    setSelectedNodeId(id);
+    setSelectedRelIndex(null);
+  }, []);
+
+  const handleRelClick = useCallback((index) => {
+    setSelectedRelIndex(index);
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleCanvasClick = useCallback(() => {
+    if (mode === 'select') {
+      setSelectedNodeId(null);
+      setSelectedRelIndex(null);
+    }
+  }, [mode]);
+
+  // ── analyze ───────────────────────────────────────────────────────────────
 
   const handleAnalyze = async (text) => {
     setLoading(true);
     setError('');
-    setJsonError('');
+    setSelectedNodeId(null);
+    setSelectedRelIndex(null);
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -25,8 +156,7 @@ export default function App() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'APIエラーが発生しました');
-      setGenogramData(body);
-      setJsonText(JSON.stringify(body, null, 2));
+      updateData(body);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -34,84 +164,145 @@ export default function App() {
     }
   };
 
-  const handleJsonApply = () => {
-    setJsonError('');
-    try {
-      const parsed = JSON.parse(jsonText);
-      if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.relations)) {
-        throw new Error('nodes と relations の配列が必要です');
-      }
-      setGenogramData(parsed);
-    } catch (e) {
-      setJsonError('JSON形式エラー: ' + e.message);
-    }
+  // ── export ─────────────────────────────────────────────────────────────────
+
+  const exportPNG = () => {
+    const svg = document.getElementById('genogram-svg');
+    if (!svg) return;
+    const w = svg.getAttribute('width');
+    const h = svg.getAttribute('height');
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const scale = 2;
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, w, h);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+      const a = document.createElement('a');
+      a.download = 'genogram.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+      URL.revokeObjectURL(img.src);
+    };
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    img.src = URL.createObjectURL(blob);
   };
 
-  const handleExportJSON = () => {
-    const blob = new Blob([jsonText], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+  const exportJSON = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = 'genogram.json';
     a.click();
-    URL.revokeObjectURL(url);
   };
 
-  const handleImportJSON = (e) => {
+  const importJSON = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target.result;
-      setJsonText(text);
-      setJsonError('');
       try {
-        const parsed = JSON.parse(text);
-        setGenogramData(parsed);
+        const parsed = JSON.parse(ev.target.result);
+        updateData(parsed);
+        setSelectedNodeId(null);
+        setSelectedRelIndex(null);
       } catch {
-        setJsonError('読み込んだファイルのJSON形式が不正です');
+        setError('JSONファイルの読み込みに失敗しました');
       }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
+  // ── delete shortcut ────────────────────────────────────────────────────────
+
+  const canDelete = selectedNodeId !== null || selectedRelIndex !== null;
+  const handleDelete = () => {
+    if (selectedNodeId) deleteNode(selectedNodeId);
+    else if (selectedRelIndex !== null) deleteRelation(selectedRelIndex);
+  };
+
   return (
     <div className="app">
+      {/* Header */}
       <header className="app-header">
         <h1 className="app-title">ジェノグラム自動描画ツール</h1>
         <div className="warning-banner">
-          ⚠️ 入力内容はClaude API（Anthropic）に送信されます。<strong>実在する個人の氏名・生年月日等の個人情報は入力しないでください。</strong>仮名・仮データのみ使用してください。
+          ⚠️ 入力内容はClaude API（Anthropic）に送信されます。
+          <strong>実在する個人の氏名・生年月日等の個人情報は入力しないでください。</strong>
+          仮名・仮データのみ使用してください。
         </div>
       </header>
 
       <main className="app-main">
-        {/* Input section */}
+        {/* Collapsible input */}
         <section className="section">
-          <InputPanel onAnalyze={handleAnalyze} loading={loading} />
-          {error && <div className="error-msg">{error}</div>}
+          <button className="collapse-toggle" onClick={() => setInputOpen((o) => !o)}>
+            {inputOpen ? '▲' : '▼'} 自然文から解析（Claude API）
+          </button>
+          {inputOpen && (
+            <>
+              <InputPanel onAnalyze={handleAnalyze} loading={loading} />
+              {error && <div className="error-msg">{error}</div>}
+            </>
+          )}
         </section>
 
-        {/* Canvas section */}
-        <section className="section">
-          <h2 className="section-title">ジェノグラム</h2>
-          <GenogramCanvas data={genogramData} />
-        </section>
+        {/* Toolbar */}
+        <div className="toolbar">
+          <button className="btn" onClick={addNode}>＋ ノード追加</button>
+          {mode === 'select' ? (
+            <button className="btn" onClick={startConnect}>🔗 接続</button>
+          ) : (
+            <button className="btn btn-active" onClick={cancelConnect}>✕ キャンセル</button>
+          )}
+          <button className="btn btn-danger-outline" onClick={handleDelete} disabled={!canDelete}>
+            🗑 削除
+          </button>
+          <div className="toolbar-spacer" />
+          <button className="btn" onClick={exportPNG}>PNG書き出し</button>
+          <button className="btn" onClick={exportJSON}>JSON保存</button>
+          <label className="btn" style={{ cursor: 'pointer' }}>
+            JSON読込
+            <input type="file" accept=".json" onChange={importJSON} style={{ display: 'none' }} />
+          </label>
+        </div>
 
-        {/* JSON editor section */}
-        <section className="section">
-          <JsonEditor value={jsonText} onChange={setJsonText} onApply={handleJsonApply} />
-          {jsonError && <div className="error-msg">{jsonError}</div>}
-          <div className="export-row">
-            <button className="btn" onClick={handleExportJSON}>
-              JSONを保存
-            </button>
-            <label className="btn" style={{ cursor: 'pointer' }}>
-              JSONを読み込む
-              <input type="file" accept=".json" onChange={handleImportJSON} style={{ display: 'none' }} />
-            </label>
+        {/* Canvas + Edit Panel */}
+        <div className="canvas-edit-row">
+          <div className="canvas-col">
+            <GenogramCanvas
+              ref={svgRef}
+              data={data}
+              selectedNodeId={selectedNodeId}
+              onNodeClick={handleNodeClick}
+              selectedRelIndex={selectedRelIndex}
+              onRelClick={handleRelClick}
+              onCanvasClick={handleCanvasClick}
+              mode={mode}
+              connectSource={connectSource}
+              onConnectStep={handleConnectStep}
+              onNodeMove={handleNodeMove}
+            />
           </div>
-        </section>
+          <div className="edit-col">
+            <EditPanel
+              selectedNodeId={selectedNodeId}
+              selectedRelIndex={selectedRelIndex}
+              nodes={data.nodes}
+              relations={data.relations}
+              onUpdateNode={updateNode}
+              onUpdateRelation={updateRelation}
+              onDeleteNode={deleteNode}
+              onDeleteRelation={deleteRelation}
+            />
+          </div>
+        </div>
       </main>
 
       <footer className="app-footer">
